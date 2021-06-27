@@ -1,85 +1,114 @@
 let s:debug = 1
 let s:terminators = '[;,[:blank:]]'
 
-function! s:update_level(char)
-    if (a:char == '(')
-        let s:paran_lvl += 1
-    elseif (a:char == ')')
-        let s:paran_lvl -= 1
-    elseif (a:char == '[')
-        let s:brack_lvl += 1
-    elseif (a:char == ']')
-        let s:brack_lvl -= 1
-    elseif (a:char == '{')
-        let s:brace_lvl += 1
-    elseif (a:char == '}')
-        let s:brace_lvl -= 1
-    elseif (a:char =~ '<')
-        let s:angle_lvl += 1
-    elseif (a:char == '>')
-        let s:angle_lvl -= 1
+function! s:inner(char, brack, backwards)
+    if (a:char == a:brack.open)
+        if (a:brack.cache == 0)
+            let a:brack.lvl += 1
+        else
+            let a:brack.lvl = a:brack.cache
+            let a:brack.cache = 0
+        endif
+        let a:brack.lastopen = 1
+        return 1
+    elseif (a:char == a:brack.close)
+        if (a:brack.lastopen && a:backwards)
+            let a:brack.cache = a:brack.lvl
+            let a:brack.lvl = -1
+        else
+            let a:brack.lvl -= 1
+        endif
+        let a:brack.lastopen = 0
+        return 1
     endif
+    return 0
+endfunction
+
+function! s:update_level(char, backwards)
+    for l:b in s:brackets
+        if (s:inner(a:char, l:b, a:backwards))
+            break
+        endif
+    endfor
+endfunction
+
+function! s:isin(haystack, needle)
+    return stridx(a:haystack, a:needle) >= 0
 endfunction
 
 function! s:main(a)
-    let s:paran_lvl = 0
-    let s:brack_lvl = 0
-    let s:brace_lvl = 0
-    let s:angle_lvl = 0
+    let s:brackets = [
+        \ { 'open': '(', 'close': ')', 'lvl': 0, 'cache': 0, 'lastopen': 0},
+        \ { 'open': '[', 'close': ']', 'lvl': 0, 'cache': 0, 'lastopen': 0},
+        \ { 'open': '{', 'close': '}', 'lvl': 0, 'cache': 0, 'lastopen': 0},
+        \ { 'open': '<', 'close': '>', 'lvl': 0, 'cache': 0, 'lastopen': 0},
+        \ ]
+    let s:closers = ''
+    let s:openers = ''
+    for l:b in s:brackets
+        let s:openers = s:openers . l:b.open
+        let s:closers = s:closers . l:b.close
+    endfor
 
     let l:line = getline('.')
     let l:cursor = getpos('.')[2]
     let l:start = l:cursor
 
     " backward
-    let hitspace = 0
-    let onterminator = 0
+    let l:hit_space = 0
+    let l:on_terminator = 0
     while l:start > 0
-        let char = l:line[l:start - 1]
-        if (s:paran_lvl >= 0 &&
-          \ s:brack_lvl >= 0 &&
-          \ s:brace_lvl >= 0 &&
-          \ s:angle_lvl >= 0)
-            if (char == '.')
+        let l:char = l:line[l:start - 1]
+
+        let l:outside_brack = 1
+        for l:b in s:brackets
+            let l:outside_brack = l:outside_brack && l:b.lvl >= 0
+        endfor
+
+        if (l:outside_brack)
+            if (l:char == '.')
                 let l:start -= a:a
                 break
-            elseif (char =~ s:terminators)
-                let hitspace = 1
-                let onterminator = l:start == l:cursor
+            elseif (l:char =~ s:terminators)
+                let l:hit_space = 1
+                let l:on_terminator = l:start == l:cursor
                 let l:start -= a:a
                 break
-            elseif (char =~ '[({<\[]' && l:start != l:cursor)
+            elseif (s:isin(s:openers, l:char) && l:start != l:cursor)
                 break
             endif
         endif
 
-        call s:update_level(char)
+        call s:update_level(l:char, 1)
         let l:start -= 1
     endwhile
 
     let l:end = l:cursor
-    if (onterminator)
+    if (l:on_terminator)
         let l:end -= 1
     else
         " forward
         while l:end < len(l:line)
-            let char = l:line[l:end]
-            if (s:paran_lvl <= 0 &&
-              \ s:brack_lvl <= 0 &&
-              \ s:brace_lvl <= 0 &&
-              \ s:angle_lvl <= 0)
-                if (char == '.')
+            let l:char = l:line[l:end]
+
+            let l:outside_brack = 1
+            for l:b in s:brackets
+                let l:outside_brack = l:outside_brack && l:b.lvl <= 0
+            endfor
+
+            if (l:outside_brack)
+                if (l:char == '.')
                     if (a:a)
-                        let l:end += hitspace || l:start == 0
-                        let l:start += hitspace
+                        let l:end += l:hit_space || l:start == 0
+                        let l:start += l:hit_space
                     endif
                     break
-                elseif (char =~ s:terminators || char =~ '[)}>\]]')
+                elseif (l:char =~ s:terminators || s:isin(s:closers, l:char))
                     break
                 endif
             endif
 
-            call s:update_level(char)
+            call s:update_level(l:char, 0)
             let l:end += 1
         endwhile
     endif
@@ -92,7 +121,7 @@ function! s:main(a)
 endfunction
 
 function! s:debug()
-    let l:ret = textobj#chainmember#select_a()
+    let l:ret = textobj#chainmember#select_i()
     let l:line  = l:ret[1][1]
     let l:start = l:ret[1][2]
     let l:end   = l:ret[2][2] + 1
