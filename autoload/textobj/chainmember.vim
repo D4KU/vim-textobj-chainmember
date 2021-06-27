@@ -24,24 +24,47 @@ function! s:inner(char, brack, backwards)
     return 0
 endfunction
 
-function! s:update_level(char, backwards)
+function! s:update_brackets(char, backwards)
     for l:b in s:brackets
         if (s:inner(a:char, l:b, a:backwards))
-            break
+            return 1
         endif
     endfor
+    return 0
+endfunction
+
+function! s:update_quotes(char)
+    for l:q in s:quotes
+        if (l:q.char == a:char)
+            let l:q.outside = !l:q.outside
+            return 1
+        endif
+    endfor
+    return 0
 endfunction
 
 function! s:isin(haystack, needle)
     return stridx(a:haystack, a:needle) >= 0
 endfunction
 
-function! s:main(a)
+function! s:outside_quotes()
+    let l:outside_quote = 1
+    for l:q in s:quotes
+        let l:outside_quote = l:outside_quote && l:q.outside
+    endfor
+    return l:outside_quote
+endfunction
+
+function! s:main(a) abort
     let s:brackets = [
-        \ { 'open': '(', 'close': ')', 'lvl': 0, 'cache': 0, 'lastopen': 0},
-        \ { 'open': '[', 'close': ']', 'lvl': 0, 'cache': 0, 'lastopen': 0},
-        \ { 'open': '{', 'close': '}', 'lvl': 0, 'cache': 0, 'lastopen': 0},
-        \ { 'open': '<', 'close': '>', 'lvl': 0, 'cache': 0, 'lastopen': 0},
+        \ { 'open': '(', 'close': ')', 'lvl': 0, 'cache': 0, 'lastopen': 0 },
+        \ { 'open': '[', 'close': ']', 'lvl': 0, 'cache': 0, 'lastopen': 0 },
+        \ { 'open': '{', 'close': '}', 'lvl': 0, 'cache': 0, 'lastopen': 0 },
+        \ { 'open': '<', 'close': '>', 'lvl': 0, 'cache': 0, 'lastopen': 0 },
+        \ ]
+    let s:quotes = [
+        \ { 'char': '"', 'outside': 1 },
+        \ { 'char': "'", 'outside': 1 },
         \ ]
     let s:closers = ''
     let s:openers = ''
@@ -51,39 +74,47 @@ function! s:main(a)
     endfor
 
     let l:line = getline('.')
-    let l:cursor = getpos('.')[2]
-    let l:start = l:cursor
+    let l:start = col('.')
 
     " backward
     let l:hit_space = 0
     let l:on_terminator = 0
+    let l:start_offset = 0
     while l:start > 0
         let l:char = l:line[l:start - 1]
 
-        let l:outside_brack = 1
-        for l:b in s:brackets
-            let l:outside_brack = l:outside_brack && l:b.lvl >= 0
-        endfor
-
-        if (l:outside_brack)
-            if (l:char == '.')
-                let l:start -= a:a
-                break
-            elseif (l:char =~ s:terminators)
-                let l:hit_space = 1
-                let l:on_terminator = l:start == l:cursor
-                let l:start -= a:a
-                break
-            elseif (s:isin(s:openers, l:char) && l:start != l:cursor)
-                break
-            endif
+        if (s:update_quotes(l:char) && !exists('l:quote_start'))
+            let l:quote_start = l:start - 1
         endif
 
-        call s:update_level(l:char, 1)
+        if (s:outside_quotes())
+            let l:outside_brack = 1
+            for l:b in s:brackets
+                let l:outside_brack = l:outside_brack && l:b.lvl >= 0
+            endfor
+
+            if (l:outside_brack)
+                if (l:char == '.')
+                    let l:start_offset = -a:a
+                    break
+                elseif (l:char =~ s:terminators)
+                    let l:start_offset = -a:a
+                    let l:hit_space = 1
+                    let l:on_terminator = l:start == col('.')
+                    break
+                elseif (s:isin(s:openers, l:char) && l:start != col('.'))
+                    break
+                endif
+            endif
+
+            call s:update_brackets(l:char, 1)
+        endif
+
         let l:start -= 1
     endwhile
 
-    let l:end = l:cursor
+    let l:end = col('.')
+    let l:uneven_quotes = 0
     if (l:on_terminator)
         let l:end -= 1
     else
@@ -91,31 +122,47 @@ function! s:main(a)
         while l:end < len(l:line)
             let l:char = l:line[l:end]
 
-            let l:outside_brack = 1
-            for l:b in s:brackets
-                let l:outside_brack = l:outside_brack && l:b.lvl <= 0
-            endfor
-
-            if (l:outside_brack)
-                if (l:char == '.')
-                    if (a:a)
-                        let l:end += l:hit_space || l:start == 0
-                        let l:start += l:hit_space
-                    endif
-                    break
-                elseif (l:char =~ s:terminators || s:isin(s:closers, l:char))
-                    break
-                endif
+            if (s:update_quotes(l:char))
+                let l:uneven_quotes = !l:uneven_quotes
             endif
 
-            call s:update_level(l:char, 0)
+            if (s:outside_quotes())
+                let l:outside_brack = 1
+                for l:b in s:brackets
+                    let l:outside_brack = l:outside_brack && l:b.lvl <= 0
+                endfor
+
+                if (l:outside_brack)
+                    if (l:char == '.')
+                        if (a:a)
+                            let l:end += l:hit_space || l:start == 0
+                            let l:start_offset += l:hit_space
+                        endif
+                        break
+                    elseif (l:char =~ s:terminators || s:isin(s:closers, l:char))
+                        break
+                    endif
+                endif
+
+                call s:update_brackets(l:char, 0)
+            endif
+
             let l:end += 1
         endwhile
     endif
 
+    if (l:uneven_quotes && exists('l:quote_start'))
+        let l:start = l:quote_start
+
+        " recalculate 'hit_space' with new 'start'
+        if (l:line[l:start - 1] =~ s:terminators)
+            let l:start_offset -= a:a
+        endif
+    endif
+
     let l:head = getpos('.')
-    let l:tail = copy(l:head)
-    let l:head[2] = l:start + 1
+    let l:tail = getpos('.')
+    let l:head[2] = l:start + l:start_offset + 1
     let l:tail[2] = l:end
     return ['v', l:head, l:tail]
 endfunction
