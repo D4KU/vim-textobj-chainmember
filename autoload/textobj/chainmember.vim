@@ -55,6 +55,15 @@ function! s:outside_quotes()
     return l:outside_quote
 endfunction
 
+function! s:outside_brackets(backwards)
+    let l:outside_brack = 1
+    for l:b in s:brackets
+        let l:lvl_valid = a:backwards ? (l:b.lvl >= 0) : (l:b.lvl <= 0)
+        let l:outside_brack = l:outside_brack && l:lvl_valid
+    endfor
+    return l:outside_brack
+endfunction
+
 function! s:main(a) abort
     let s:brackets = [
         \ { 'open': '(', 'close': ')', 'lvl': 0, 'cache': 0, 'lastopen': 0 },
@@ -77,9 +86,11 @@ function! s:main(a) abort
     let l:start = col('.')
 
     " backward
-    let l:hit_space = 0
-    let l:on_terminator = 0
+    let l:terminator_start = 0
+    let l:no_dot_start = 0
+    let l:at_terminator = 0
     let l:start_offset = 0
+    let l:at_cursor = 1
     while l:start > 0
         let l:char = l:line[l:start - 1]
 
@@ -88,34 +99,31 @@ function! s:main(a) abort
         endif
 
         if (s:outside_quotes())
-            let l:outside_brack = 1
-            for l:b in s:brackets
-                let l:outside_brack = l:outside_brack && l:b.lvl >= 0
-            endfor
-
-            if (l:outside_brack)
+            if (s:outside_brackets(1))
                 if (l:char == '.')
                     let l:start_offset = -a:a
                     break
                 elseif (l:char =~ s:terminators)
-                    let l:start_offset = -a:a
-                    let l:hit_space = 1
-                    let l:on_terminator = l:start == col('.')
+                    let l:at_terminator = l:at_cursor
+                    let l:start_offset -= a:a
+                    let l:terminator_start = 1
+                    let l:no_dot_start = 1
                     break
-                elseif (s:isin(s:openers, l:char) && l:start != col('.'))
+                elseif (s:isin(s:openers, l:char) && !l:at_cursor)
+                    let l:no_dot_start = 1
                     break
                 endif
             endif
-
             call s:update_brackets(l:char, 1)
         endif
 
+        let l:at_cursor = 0
         let l:start -= 1
     endwhile
 
     let l:end = col('.')
     let l:uneven_quotes = 0
-    if (l:on_terminator)
+    if (l:at_terminator)
         let l:end -= 1
     else
         " forward
@@ -127,23 +135,17 @@ function! s:main(a) abort
             endif
 
             if (s:outside_quotes())
-                let l:outside_brack = 1
-                for l:b in s:brackets
-                    let l:outside_brack = l:outside_brack && l:b.lvl <= 0
-                endfor
-
-                if (l:outside_brack)
+                if (s:outside_brackets(0))
                     if (l:char == '.')
                         if (a:a)
-                            let l:end += l:hit_space || l:start == 0
-                            let l:start_offset += l:hit_space
+                            let l:end += l:no_dot_start || l:start == 0
+                            let l:start_offset += l:terminator_start
                         endif
                         break
                     elseif (l:char =~ s:terminators || s:isin(s:closers, l:char))
                         break
                     endif
                 endif
-
                 call s:update_brackets(l:char, 0)
             endif
 
@@ -154,7 +156,7 @@ function! s:main(a) abort
     if (l:uneven_quotes && exists('l:quote_start'))
         let l:start = l:quote_start
 
-        " recalculate 'hit_space' with new 'start'
+        " recalculate 'terminator_start' with new 'start'
         if (l:line[l:start - 1] =~ s:terminators)
             let l:start_offset -= a:a
         endif
