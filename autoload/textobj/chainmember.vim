@@ -11,19 +11,28 @@ let s:terminators = '[;,[:blank:]]'
 " returns 1 if 'char' is a bracket at all
 function! s:update_brackets_inner(char, brack, backwards)
     if (a:char == a:brack.open)
+        " If cache isn't set, exhibit standard behavior
         if (a:brack.cache == 0)
+            " an opening bracket increases the level
             let a:brack.lvl += 1
         else
+            " load level from cache, empty cache
             let a:brack.lvl = a:brack.cache
             let a:brack.cache = 0
         endif
         let a:brack.lastopen = 1
         return 1
     elseif (a:char == a:brack.close)
+        " If a closer is encountered in front of an opener, the current
+        " level is cached and 'lvl' is set to 1. When the next opener is
+        " found, the cached level is applied again to 'lvl'. This is to treat
+        " calls like 'curry()()' as one unit.  Otherwise the back parser would
+        " stop at the first opening bracket found.
         if (a:brack.lastopen && a:backwards)
             let a:brack.cache = a:brack.lvl
             let a:brack.lvl = -1
         else
+            " a closing bracket increases the level
             let a:brack.lvl -= 1
         endif
         let a:brack.lastopen = 0
@@ -105,12 +114,8 @@ function! s:main(a) abort
     " consider 'open' and 'close' as constant, the other values are used to
     " save runtime state
     " * lvl: How many layers deep in the bracket hierarchy in the parser?
-    " * cache: Relevant when parsing backwards. If a closer is encountered
-    "   after (in front of) an opener, the current level is cached and 'lvl'
-    "   is set to -1. When the next opener is found, the cached level is
-    "   applied again to 'lvl'. This is to treat calls like 'curry()()' as
-    "   one unit. Otherwise the back parser would stop at the first opening
-    "   bracket found.
+    " * cache: Relevant when parsing backwards. See comments in
+    "   's:update_brackets_inner'
     " * lastopen: 1 if the lastly encountered bracket was an opener
     let s:brackets = [
         \ { 'open': '(', 'close': ')', 'lvl': 0, 'cache': 0, 'lastopen': 0 },
@@ -133,8 +138,8 @@ function! s:main(a) abort
         let s:closers = s:closers . l:b.close
     endfor
 
+    " all characters of the current line
     let l:line = getline('.')
-    let l:start = col('.')
 
     " parse backward from cursor position ====================================
     " 1 if first character is a terminator
@@ -148,6 +153,9 @@ function! s:main(a) abort
     let l:start_offset = 0
     " 1 as long character under cursor is parsed, i.e. in the first loop
     let l:at_cursor = 1
+    " future start position of text object
+    let l:start = col('.')
+
     while l:start > 0
         " col('.') is index 1 based, array access index 0: so we subtract 1
         let l:char = l:line[l:start - 1]
@@ -187,13 +195,19 @@ function! s:main(a) abort
         let l:start -= 1
     endwhile
 
+    " future end position of text object
     let l:end = col('.')
+    " 0 if even count of quotes has been found on forward parsing
     let l:uneven_quotes = 0
     if (l:cursor_at_terminator)
+        " skip forward parsing if cursor
+        " convert 1-based to 0-based index
         let l:end -= 1
     else
-        " forward
+        " parse forward from cursor position =================================
         while l:end < len(l:line)
+            " for the end position we don't convert 1-based index to 0-based
+            " so we sample the line one character ahead
             let l:char = l:line[l:end]
 
             if (s:update_quotes(l:char))
@@ -204,7 +218,12 @@ function! s:main(a) abort
                 if (s:outside_brackets(0))
                     if (l:char == '.')
                         if (a:a)
+                            " because we didn't stop at a dot in the forward
+                            " parse, the cursor is on a first chain member, so
+                            " we include the dot after it instead
                             let l:end += l:no_dot_start || l:start == 0
+                            " in this case, we also don't include white space
+                            " in front of the word
                             let l:start_offset += l:start_at_terminator
                         endif
                         break
@@ -222,28 +241,24 @@ function! s:main(a) abort
     endif
 
     if (l:uneven_quotes && exists('l:quote_start'))
+        " if an uneven quote count was encountered during forward parsing
+        " and backward parsing found at least one, we assume we are inside of
+        " quotes and set 'l:start' to the first quotes found by the backward
+        " pass
         let l:start = l:quote_start
 
-        " recalculate 'start_at_terminator' with new 'start'
+        " recalculate 'start_at_terminator' with new 'l:start'
         if (l:line[l:start - 1] =~ s:terminators)
             let l:start_offset -= a:a
         endif
     endif
 
+    " build return array needed by 'textobj-user' plugin
     let l:head = getpos('.')
     let l:tail = getpos('.')
     let l:head[2] = l:start + l:start_offset + 1
     let l:tail[2] = l:end
     return ['v', l:head, l:tail]
-endfunction
-
-function! s:debug()
-    let l:ret = textobj#chainmember#select_a()
-    let l:line  = l:ret[1][1]
-    let l:start = l:ret[1][2]
-    let l:end   = l:ret[2][2] + 1
-    call clearmatches()
-    call matchaddpos('ChainMember', [[l:line, l:start, l:end - l:start]])
 endfunction
 
 function! textobj#chainmember#select_i()
@@ -254,8 +269,19 @@ function! textobj#chainmember#select_a()
     return s:main(1)
 endfunction
 
+" highlight the text object with the 'ChainMember' highlight group
+function! s:debug()
+    let l:ret = textobj#chainmember#select_a()
+    let l:line  = l:ret[1][1]
+    let l:start = l:ret[1][2]
+    let l:end   = l:ret[2][2] + 1
+    call clearmatches()
+    call matchaddpos('ChainMember', [[l:line, l:start, l:end - l:start]])
+endfunction
+
 if (s:debug)
     highlight ChainMember cterm=italic ctermbg=236
+    " execute debug function on every cursor update
     augroup s:chainmember
         autocmd!
         autocmd! CursorMoved * call s:debug()
