@@ -85,56 +85,8 @@ first.second(foo.bar)(foobar.baz).third
      └─────────── am ───────────┘
 ```
 
-So it turns out that these text objects are pretty handy to select all sorts
-of function calls and accesses by index. However, there are a few things that
-fall inside undefined behavior. Consult the help pages for more information.
-
-## What this plugin can't do
-
-This plugin does not rely on Vim's syntax items. It therefore works regardless
-of whether the file type is correctly set. However, this can lead to
-unexpected behavior if the cursor is positioned inside strings, because it
-parses its contents as if actual code.
-
-Alpha-numerical characters are fine:
-```
-             ........
-first.second("foobar").third
-             └─ am ─┘
-```
-
-But spaces create problems:
-```
-                ......
-first.second("  foobar").third
-               └──── am ─────┘
-```
-
-... as do parenthesis:
-```
-              .
-first.second("((((").third
-             └─ am ─┘
-```
-
-With the cursor outside of strings, everything is okay, though:
-```
-     ........        .
-first.second("  ((((").third
-     └───── am ──────┘
-```
-
-If a statement wraps over multiple lines, the plugin will not find code on
-other lines than the current one:
-```
-                 .
-     fourth.fifth)
-└────── am ──────┘
-```
-
-Floats are handled as if digits were letters:
-```
- ......
-1.34567
- └ am ┘
-```
+So it turns out that these text objects are also pretty handy to select all
+sorts of function calls and accesses by index. However, there are a few things
+that fall inside undefined behavior. Consult [:help
+textobj-chainmember-limitations](https://github.com/D4KU/vim-textobj-chainmember/blob/main/doc/textobj-chainmember.txt#L107)
+for more information.
