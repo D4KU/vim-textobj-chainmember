@@ -1,5 +1,5 @@
 " 1 if debug highlighting should be enabled
-let s:debug = 1
+let s:debug = 0
 " when this regex matches, parsing is stopped
 let s:terminators = '[;,[:blank:]]'
 
