@@ -36,6 +36,13 @@ first.second.third
       └ im ┘
 ```
 
+More than one member can be selected:
+```
+.....
+first.second.third
+└─── 2im ──┘
+```
+
 Method calls can be selected outside their argument list:
 ```
      ........          .

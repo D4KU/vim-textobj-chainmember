@@ -199,34 +199,44 @@ function! s:main(a) abort
     let l:end = col('.')
     " 0 if even count of quotes has been found on forward parsing
     let l:uneven_quotes = 0
+
     if (l:cursor_at_terminator)
         " skip forward parsing if cursor
         " convert 1-based to 0-based index
         let l:end -= 1
     else
+        " counts how many dots have been encountered
+        let l:dot_count = 0
+
         " parse forward from cursor position =================================
         while l:end < len(l:line)
             " for the end position we don't convert 1-based index to 0-based
             " so we sample the line one character ahead
             let l:char = l:line[l:end]
 
+            " update s:quotes state
             if (s:update_quotes(l:char))
+                " current char is a quote
                 let l:uneven_quotes = !l:uneven_quotes
             endif
 
             if (s:outside_quotes())
                 if (s:outside_brackets(0))
                     if (l:char == '.')
-                        if (a:a)
-                            " because we didn't stop at a dot in the forward
-                            " parse, the cursor is on a first chain member, so
-                            " we include the dot after it instead
-                            let l:end += l:no_dot_start || l:start == 0
-                            " in this case, we also don't include white space
-                            " in front of the word
-                            let l:start_offset += l:start_at_terminator
+                        let l:dot_count += 1
+                        " skip dots if given member count is higher
+                        if (l:dot_count >= v:count1)
+                            if (a:a)
+                                " because we didn't stop at a dot in the forward
+                                " parse, the cursor is on a first chain member, so
+                                " we include the dot after it instead
+                                let l:end += l:no_dot_start || l:start == 0
+                                " in this case, we also don't include white space
+                                " in front of the word
+                                let l:start_offset += l:start_at_terminator
+                            endif
+                            break
                         endif
-                        break
                     elseif (l:char =~ s:terminators || s:isin(s:closers, l:char))
                         break
                     endif

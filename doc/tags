@@ -3,5 +3,7 @@
 g:textobj_chainmember_no_default_key_mappings	textobj-chainmember.txt	/*g:textobj_chainmember_no_default_key_mappings*
 textobj-chainmember	textobj-chainmember.txt	/*textobj-chainmember*
 textobj-chainmember-changelog	textobj-chainmember.txt	/*textobj-chainmember-changelog*
-textobj-chainmember-usage	textobj-chainmember.txt	/*textobj-chainmember-usage*
 textobj-chainmember-limitations	textobj-chainmember.txt	/*textobj-chainmember-limitations*
+textobj-chainmember-mappings	textobj-chainmember.txt	/*textobj-chainmember-mappings*
+textobj-chainmember-usage	textobj-chainmember.txt	/*textobj-chainmember-usage*
+textobj-chainmember.txt	textobj-chainmember.txt	/*textobj-chainmember.txt*
