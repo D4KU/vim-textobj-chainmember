@@ -110,7 +110,7 @@ endfunction
 " parse the whole statement under the cursor (which might span several lines)
 " from start to finish and then query the cursor position in it. You always
 " know better afterwards.
-function! s:main(a) abort
+function! s:main(a, shift) abort
     " consider 'open' and 'close' as constant, the other values are used to
     " save runtime state
     " * lvl: How many layers deep in the bracket hierarchy in the parser?
@@ -155,60 +155,71 @@ function! s:main(a) abort
     let l:at_cursor = 1
     " future start position of text object
     let l:start = col('.')
-
-    while l:start > 0
-        " col('.') is index 1 based, array access index 0: so we subtract 1
-        let l:char = l:line[l:start - 1]
-
-        " save the position of the first encountered quote
-        " so later, with more information, we can jump back to it
-        if (s:update_quotes(l:char) && !exists('l:quote_start'))
-            let l:quote_start = l:start - 1
-        endif
-
-        " we can only break out of the loop earlier if we are not in a quoted
-        " area or between quotes
-        if (s:outside_quotes())
-            if (s:outside_brackets(1))
-                if (l:char == '.')
-                    " if it's an 'a' text object (as in 'am') we include the
-                    " dot, if not, 0 is added
-                    let l:start_offset -= a:a
-                    break
-                elseif (l:char =~ s:terminators)
-                    let l:start_offset -= a:a
-                    let l:cursor_at_terminator = l:at_cursor
-                    let l:start_at_terminator = 1
-                    let l:no_dot_start = 1
-                    break
-                elseif (s:isin(s:openers, l:char) && !l:at_cursor)
-                    " we thought we are outside brackets, but we found an
-                    " opener to the left
-                    let l:no_dot_start = 1
-                    break
-                endif
-            endif
-            call s:update_brackets(l:char, 1)
-        endif
-
-        let l:at_cursor = 0
-        let l:start -= 1
-    endwhile
-
     " future end position of text object
     let l:end = col('.')
+    " counts how many dots have been encountered
+    let l:dot_count = 0
+
+    if (a:shift <= 0)
+        while 0 < l:start
+            " col('.') is index 1 based, array access index 0: so we subtract 1
+            let l:char = l:line[l:start - 1]
+
+            " save the position of the first encountered quote
+            " so later, with more information, we can jump back to it
+            if (s:update_quotes(l:char) && !exists('l:quote_start'))
+                let l:quote_start = l:start - 1
+            endif
+
+            " we can only break out of the loop earlier if we are not in a quoted
+            " area or between quotes
+            if (s:outside_quotes())
+                if (s:outside_brackets(1))
+                    if (l:char == '.')
+                        let l:dot_count += 1
+
+                        " e.g. shift == -1: end at first dot found
+                        if (-a:shift == l:dot_count)
+                            let l:end = l:start
+                        elseif (-a:shift < l:dot_count)
+                            " if it's an 'a' text object (as in 'am') we
+                            " include the dot, if not, 0 is added
+                            let l:start_offset -= a:a
+                            break
+                        endif
+                    elseif (l:char =~ s:terminators)
+                        let l:start_offset -= a:a
+                        let l:cursor_at_terminator = l:at_cursor
+                        let l:start_at_terminator = 1
+                        let l:no_dot_start = 1
+                        break
+                    elseif (s:isin(s:openers, l:char) && !l:at_cursor)
+                        " we thought we are outside brackets, but we found an
+                        " opener to the left
+                        let l:no_dot_start = 1
+                        break
+                    endif
+                endif
+                call s:update_brackets(l:char, 1)
+            endif
+
+            let l:at_cursor = 0
+            let l:start -= 1
+        endwhile
+    endif
+
     " 0 if even count of quotes has been found on forward parsing
     let l:uneven_quotes = 0
 
     if (l:cursor_at_terminator)
-        " skip forward parsing if cursor
+        " skip forward parsing if cursor over terminator or shift is negative
         " convert 1-based to 0-based index
         let l:end -= 1
+    elseif (a:shift < 0)
+        let l:end += (l:no_dot_start || l:start == 0) - 1
     else
-        " counts how many dots have been encountered
-        let l:dot_count = 0
-
         " parse forward from cursor position =================================
+        let l:dot_count = 0
         while l:end < len(l:line)
             " for the end position we don't convert 1-based index to 0-based
             " so we sample the line one character ahead
@@ -224,8 +235,17 @@ function! s:main(a) abort
                 if (s:outside_brackets(0))
                     if (l:char == '.')
                         let l:dot_count += 1
-                        " skip dots if given member count is higher
-                        if (l:dot_count >= v:count1)
+
+                        " e.g. shift == 1: start at first dot found
+                        if (a:shift == l:dot_count)
+                            " 'inner' object starts 1 letter later
+                            let l:start = l:end + !a:a
+                        endif
+
+                        " skip over Nth dot if given member count is greater N,
+                        " shift can make us skip over dots even if count is
+                        " small enough
+                        if (l:dot_count >= v:count1 + a:shift)
                             if (a:a)
                                 " because we didn't stop at a dot in the forward
                                 " parse, the cursor is on a first chain member, so
@@ -271,12 +291,23 @@ function! s:main(a) abort
     return ['v', l:head, l:tail]
 endfunction
 
-function! textobj#chainmember#select_i()
-    return s:main(0)
+function! textobj#chainmember#select_il()
+    return s:main(0, -1)
 endfunction
-
+function! textobj#chainmember#select_al()
+    return s:main(1, -1)
+endfunction
+function! textobj#chainmember#select_i()
+    return s:main(0, 0)
+endfunction
 function! textobj#chainmember#select_a()
-    return s:main(1)
+    return s:main(1, 0)
+endfunction
+function! textobj#chainmember#select_in()
+    return s:main(0, 1)
+endfunction
+function! textobj#chainmember#select_an()
+    return s:main(1, 1)
 endfunction
 
 " highlight the text object with the 'ChainMember' highlight group

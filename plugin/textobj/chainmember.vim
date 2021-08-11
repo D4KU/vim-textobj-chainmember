@@ -12,7 +12,18 @@ call textobj#user#plugin('chainmember', {
     \     'select-a': 'am',
     \     'select-i-function': 'textobj#chainmember#select_i',
     \     'select-i': 'im',
-    \     'scan': 'cursor',
+    \   },
+    \   'next': {
+    \     'select-a-function': 'textobj#chainmember#select_an',
+    \     'select-a': 'anm',
+    \     'select-i-function': 'textobj#chainmember#select_in',
+    \     'select-i': 'inm',
+    \   },
+    \   'last': {
+    \     'select-a-function': 'textobj#chainmember#select_al',
+    \     'select-a': 'alm',
+    \     'select-i-function': 'textobj#chainmember#select_il',
+    \     'select-i': 'ilm',
     \   },
     \ })
 
