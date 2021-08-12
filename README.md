@@ -36,13 +36,6 @@ first.second.third
       └ im ┘
 ```
 
-More than one member can be selected:
-```
-.....
-first.second.third
-└─── 2im ──┘
-```
-
 Method calls can be selected outside their argument list:
 ```
      ........          .
@@ -90,6 +83,31 @@ first.second[foo.index][j].third
      ........       ..          .
 first.second(foo.bar)(foobar.baz).third
      └─────────── am ───────────┘
+```
+
+More than one member can be selected:
+```
+.....
+first.second.third
+└── 2im ───┘
+```
+
+..., or the *next* or *last* one:
+```
+.....
+first.second.third
+     └ anm ┘
+
+            ......
+first.second.third
+     └ alm ┘
+```
+
+..., which can be combined with a count:
+```
+.....
+first.second.third
+     └── 2anm ───┘
 ```
 
 So it turns out that these text objects are also pretty handy to select all

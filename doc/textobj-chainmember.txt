@@ -40,11 +40,6 @@ For `am`, the first chain member includes the dot to its right:
     first.second.third ~
           └ im ┘ ~
 
-More than one member can be selected:
-    ..... ~
-    first.second.third ~
-    └─── 2im ──┘ ~
-
 Method calls can be selected outside their argument list:
          ........          . ~
     first.second(arg1, arg2).third ~
@@ -80,6 +75,25 @@ Type parameters are no problem, either:
     first.second(foo.bar)(foobar.baz).third ~
          └─────────── am ───────────┘ ~
 
+More than one member can be selected:
+    ..... ~
+    first.second.third ~
+    └─── 2im ──┘ ~
+
+..., or the *next* or *last* one:
+    ..... ~
+    first.second.third ~
+         └ anm ┘ ~
+
+                ...... ~
+    first.second.third ~
+         └ alm ┘ ~
+
+..., which can be combined with a count:
+    ..... ~
+    first.second.third ~
+         └── 2anm ───┘ ~
+
 
 MAPPINGS     *textobj-chainmember-mappings*
 
@@ -95,12 +109,33 @@ Consult the |textobj-user| documentation for additional information.
 
       *<Plug>(textobj-chainmember-a)*
 am   <Plug>(textobj-chainmember-a)
-   "a chainmember", select a chain member with the dot to its left. If it's the
-   first member in a chain, the dot to its right is chosen instead.
+   "a chainmember", select [count] chain members with the dot to their left.
+   For the first member in a chain, the dot to its right is chosen.
 
       *<Plug>(textobj-chainmember-i)*
 im   <Plug>(textobj-chainmember-i)
-   "inner chainmember", select a chain member without its dot.
+   "inner chainmember", select [count] chain members without their dot.
+
+      *<Plug>(textobj-chainmember-last-a)*
+alm  <Plug>(textobj-chainmember-last-a)
+   "a last chainmember", select the [count] last chain members with the dot to
+   their left. For the first member in a chain, the dot to its right is
+   chosen.
+
+      *<Plug>(textobj-chainmember-last-i)*
+ilm  <Plug>(textobj-chainmember-last-i)
+   "inner last chainmember", select the [count] last chain members without
+   their dot.
+
+      *<Plug>(textobj-chainmember-next-a)*
+anm  <Plug>(textobj-chainmember-next-a)
+   "a next chainmember", select the [count] next chain members with the dot to
+   their left.
+
+      *<Plug>(textobj-chainmember-next-i)*
+inm  <Plug>(textobj-chainmember-next-i)
+   "inner next chainmember", select the [count] next chain members without
+   their dot.
 
        *g:textobj_chainmember_no_default_key_mappings*
 g:textobj_chainmember_no_default_key_mappings

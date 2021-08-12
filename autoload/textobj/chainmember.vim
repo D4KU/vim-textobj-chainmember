@@ -144,8 +144,8 @@ function! s:main(a, shift) abort
     " parse backward from cursor position ====================================
     " 1 if first character is a terminator
     let l:start_at_terminator = 0
-    " 0 if first character is a dot, 1 otherwise
-    let l:no_dot_start = 0
+    " 1 if first character is a dot
+    let l:dot_start = 0
     " 1 if cursor is directly on terminator
     let l:cursor_at_terminator = 0
     " later stages of the algorithm can offset the start position when they
@@ -176,27 +176,28 @@ function! s:main(a, shift) abort
             if (s:outside_quotes())
                 if (s:outside_brackets(1))
                     if (l:char == '.')
-                        let l:dot_count += 1
+                        let l:dot_count -= 1
 
                         " e.g. shift == -1: end at first dot found
-                        if (-a:shift == l:dot_count)
+                        if (a:shift == l:dot_count)
                             let l:end = l:start
-                        elseif (-a:shift < l:dot_count)
+                        " because shift can only be 0 or negative here:
+                        " read as: abs(a:shift) < abs(l:dot_count)
+                        elseif (a:shift > l:dot_count)
                             " if it's an 'a' text object (as in 'am') we
                             " include the dot, if not, 0 is added
                             let l:start_offset -= a:a
+                            let l:dot_start = 1
                             break
                         endif
                     elseif (l:char =~ s:terminators)
                         let l:start_offset -= a:a
                         let l:cursor_at_terminator = l:at_cursor
                         let l:start_at_terminator = 1
-                        let l:no_dot_start = 1
                         break
                     elseif (s:isin(s:openers, l:char) && !l:at_cursor)
                         " we thought we are outside brackets, but we found an
                         " opener to the left
-                        let l:no_dot_start = 1
                         break
                     endif
                 endif
@@ -216,7 +217,11 @@ function! s:main(a, shift) abort
         " convert 1-based to 0-based index
         let l:end -= 1
     elseif (a:shift < 0)
-        let l:end += (l:no_dot_start || l:start == 0) - 1
+        " if we didn't stop at a dot in the forward
+        " parse, the cursor is on a first chain member, so
+        " we include the dot after it instead.
+        " also: convert 1-based to 0-based index
+        let l:end += !l:dot_start - 1
     else
         " parse forward from cursor position =================================
         let l:dot_count = 0
@@ -247,10 +252,10 @@ function! s:main(a, shift) abort
                         " small enough
                         if (l:dot_count >= v:count1 + a:shift)
                             if (a:a)
-                                " because we didn't stop at a dot in the forward
+                                " if we didn't stop at a dot in the forward
                                 " parse, the cursor is on a first chain member, so
                                 " we include the dot after it instead
-                                let l:end += l:no_dot_start || l:start == 0
+                                let l:end += !l:dot_start
                                 " in this case, we also don't include white space
                                 " in front of the word
                                 let l:start_offset += l:start_at_terminator
